@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안산시 생생 맛집 지도 (Ansan Gourmet Map)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons for stunning visuals -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet.js (Open Source Map Library) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- PapaParse for highly robust client-side CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- React & ReactDOM (UMD Production build) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel for on-the-fly JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google Fonts Inter & Nanum Square Round -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+        }
+        /* Custom scrollbar styling for high elegance */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Leaflet Map elements rounded-corners override */
+        .leaflet-container {
+            font-family: inherit;
+        }
+        .leaflet-bar {
+            border: none !important;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+        }
+        .leaflet-bar a {
+            background-color: white !important;
+            color: #1e293b !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            transition: all 0.2s;
+        }
+        .leaflet-bar a:hover {
+            background-color: #f8fafc !important;
+            color: #f97316 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col overflow-hidden">
+
+    <div id="app" class="w-full h-screen flex flex-col"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const defaultRestaurants = [
+            {
+                id: 1,
+                name: "홍봉선간장게장",
+                category: "한식",
+                address: "경기도 안산시 단원구 광덕서로 62",
+                gu: "단원구",
+                phone: "031-481-9988",
+                seats: "80석",
+                parking: "주차 가능 (지하 전용 주차장 보유)",
+                holiday: "매주 월요일 정기 휴무",
+                description: "생생정보통 및 다수 방송에 소개된 알이 가득한 암꽃게 게장 전문점입니다. 짜지 않고 깊은 감칠맛을 자랑하는 비법 씨간장으로 직접 숙성시킵니다.",
+                lat: 37.3112,
+                lng: 126.8223
+            },
+            {
+                id: 2,
+                name: "포크너 (고잔본점)",
+                category: "양식",
+                address: "경기도 안산시 단원구 광덕대로 168",
+                gu: "단원구",
+                phone: "031-401-4752",
+                seats: "38석",
+                parking: "인근 고잔동 공영주차장 이용 지원",
+                holiday: "연중무휴 (설, 추석 명절 전일 및 당일 휴무)",
+                description: "고잔신도시에서 시작해 전국적으로 명성을 떨치고 있는 대표적인 유로피언 이탈리안 레스토랑. 살치살 스테이크와 통베이컨 크림파스타가 대표메뉴입니다.",
+                lat: 37.3155,
+                lng: 126.8291
+            },
+            {
+                id: 3,
+                name: "팔곡가든",
+                category: "한식",
+                address: "경기도 안산시 상록구 팔곡이동 382",
+                gu: "상록구",
+                phone: "031-501-5262",
+                seats: "120석",
+                parking: "전용 야외 대형 주차장 (무료)",
+                holiday: "매주 화요일 휴무",
+                description: "전통 한옥 양식 분위기에서 몸에 좋은 곤드레 가마솥밥과 신선한 청정 산채나물, 정갈하게 조리한 오리 주물럭 구이를 즐길 수 있는 최고의 한식 웰빙 명소입니다.",
+                lat: 37.3023,
+                lng: 126.8835
+            },
+            {
+                id: 4,
+                name: "시골순대",
+                category: "한식",
+                address: "경기도 안산시 상록구 용신로 351",
+                gu: "상록구",
+                phone: "031-418-3532",
+                seats: "50석",
+                parking: "인근 유료 주차장 이용 및 골목 주차",
+                holiday: "매주 수요일 정기 휴무",
+                description: "속이 빈틈없이 꽉 들어차 고소하고 쫄깃함이 남다른 정통 수제 막창순대 전문점. 잡내 없는 진하고 개운한 순대국밥 국물이 해장과 보양에 탁월합니다.",
+                lat: 37.3125,
+                lng: 126.8654
+            },
+            {
+                id: 5,
+                name: "칸티푸르 인도레스토랑",
+                category: "일식/아시안",
+                address: "경기도 안산시 단원구 다문화길 16",
+                gu: "단원구",
+                phone: "031-492-2018",
+                seats: "60석",
+                parking: "공영 주차빌딩 이용 편리",
+                holiday: "연중무휴",
+                description: "원곡동 다문화특구의 터줏대감이자 현지 셰프가 직접 구워내는 화덕 탄두리 치킨과 양고기, 버터난, 정통 커리 향이 매력적인 오리지널 인도/네팔 푸드 다이닝입니다.",
+                lat: 37.3242,
+                lng: 126.7915
+            },
+            {
+                id: 6,
+                name: "유니스의 정원",
+                category: "양식",
+                address: "경기도 안산시 상록구 반월천북길 139",
+                gu: "상록구",
+                phone: "031-437-2045",
+                seats: "180석",
+                parking: "전용 야외 주차장 완비 (대형 버스 가능)",
+                holiday: "매주 월요일 휴무",
+                description: "수려한 숲과 오솔길, 정성껏 꾸며진 허브 테마 산책로가 어우러진 대형 힐링 파인다이닝 공간. 부드럽게 훈연한 모듬 바비큐 플레이트가 인기 메뉴입니다.",
+                lat: 37.3055,
+                lng: 126.9038
+            },
+            {
+                id: 7,
+                name: "산촌칼국수",
+                category: "한식",
+                address: "경기도 안산시 상록구 반석로 71",
+                gu: "상록구",
+                phone: "031-409-5114",
+                seats: "80석",
+                parking: "가게 전면 및 후면 무료 주차 구역",
+                holiday: "매주 둘째, 넷째 목요일 휴무",
+                description: "비린 맛 없이 칼칼하고 산더미처럼 제공되는 생바지락 손칼국수와 매일 매장에서 매콤하게 무치는 겉절이, 크기가 주먹만 한 수제 개성왕만두의 뛰어난 콜라보를 선보입니다.",
+                lat: 37.3214,
+                lng: 126.8552
+            },
+            {
+                id: 8,
+                name: "돌식당 (선부점)",
+                category: "한식",
+                address: "경기도 안산시 단원구 선부광장1로 66",
+                gu: "단원구",
+                phone: "031-411-9252",
+                seats: "70석",
+                parking: "상가 지하 주차장 이용 가능",
+                holiday: "매주 월요일 휴무",
+                description: "안산 시민들이 입을 모아 추천하는 정통 곱창전골 및 얼큰한 우거지 감자탕 전문 노포. 씹을수록 우러나는 고소한 곱과 칼칼하게 맵싸한 양념 다대기의 정석입니다.",
+                lat: 37.3352,
+                lng: 126.8081
+            },
+            {
+                id: 9,
+                name: "아리랑왕갈비탕",
+                category: "한식",
+                address: "경기도 안산시 단원구 원곡공원로 17",
+                gu: "단원구",
+                phone: "031-493-3833",
+                seats: "90석",
+                parking: "가게 앞 전용 주차라인 제공",
+                holiday: "매주 화요일 휴무",
+                description: "갈빗대 하나가 손바닥 크기만 한 어마어마한 압도적 사이즈의 왕갈비탕 전문점. 가마솥에서 고아낸 담백하고 진한 사골육수가 보양식을 먹는 듯 든든한 깊은 풍미를 남깁니다.",
+                lat: 37.3255,
+                lng: 126.7972
+            },
+            {
+                id: 10,
+                name: "영의정",
+                category: "한식",
+                address: "경기도 안산시 단원구 광덕서로 78",
+                gu: "단원구",
+                phone: "031-482-5300",
+                seats: "200석 (전석 개별 프라이빗 룸 구성)",
+                parking: "전용 발레파킹 지원 및 인근 지하주차장 이용",
+                holiday: "명절 당일 휴무",
+                description: "안산에서 최고의 격식과 우아함을 제공하는 프리미엄 한정식 코스요리 전문점. 상견례, 회갑연, 비즈니스 바이어 접대를 위한 최고급 제철 한식 플레이팅을 선사합니다.",
+                lat: 37.3122,
+                lng: 126.8208
+            },
+            {
+                id: 11,
+                name: "원주통닭 (본점)",
+                category: "기타",
+                address: "경기도 안산시 단원구 고잔2길 73",
+                gu: "단원구",
+                phone: "031-410-4491",
+                seats: "55석",
+                parking: "도보 2분 거리 중앙동 공영주차장",
+                holiday: "매주 월요일 정기 휴무",
+                description: "수십 년의 헤리티지를 품은 안산에서 가장 전통 있는 옛날식 가마솥 튀김 통닭집. 극강의 바삭함을 품은 오리지널 후라이드와 매콤달콤한 소스, 별미인 마늘 모래집 튀김이 인기입니다.",
+                lat: 37.3193,
+                lng: 126.8377
+            },
+            {
+                id: 12,
+                name: "월피동곱창집",
+                category: "한식",
+                address: "경기도 안산시 상록구 월피로 22",
+                gu: "상록구",
+                phone: "031-402-9289",
+                seats: "65석",
+                parking: "주변 도로 이면주차 가능",
+                holiday: "매달 1, 3번째 월요일 휴무",
+                description: "곱창 마니아들에게 안산 탑티어로 꼽히는 고소한 곱 가득 한우 곱창 전문점. 잡내 제거를 위한 불쇼와 직접 담근 대파김치를 곱창 기름에 구워 먹는 맛이 환상적입니다.",
+                lat: 37.3321,
+                lng: 126.8512
+            },
+            {
+                id: 13,
+                name: "사마르칸트",
+                category: "일식/아시안",
+                address: "경기도 안산시 단원구 다문화길 10",
+                gu: "단원구",
+                phone: "031-492-6991",
+                seats: "45석",
+                parking: "인근 공영주차타워",
+                holiday: "연중무휴",
+                description: "우즈베키스탄 전통 실크로드 정취를 그대로 살린 양고기 꼬치구이(샤실릭)와 고기빵(삼사), 향료 풍미가 매력적인 소고기 필라프 볶음밥 등 중앙아시아 미식을 탐방하기에 최적입니다.",
+                lat: 37.3245,
+                lng: 126.7911
+            },
+            {
+                id: 14,
+                name: "24시성포감자탕",
+                category: "한식",
+                address: "경기도 안산시 상록구 충장로 515",
+                gu: "상록구",
+                phone: "031-414-2454",
+                seats: "110석",
+                parking: "주차타워 및 지상 주차면 완비",
+                holiday: "연중무휴 24시간 영업",
+                description: "인심 좋고 푸짐함으로 24시간 안산 시민들의 해장과 술자리를 책임지는 터줏대감입니다. 살점이 잔뜩 붙은 연하고 보들보들한 돼지등뼈와 진한 시래기 국물이 극상의 안정을 줍니다.",
+                lat: 37.3251,
+                lng: 126.8458
+            },
+            {
+                id: 15,
+                name: "대부도 16호할머니칼국수",
+                category: "한식",
+                address: "경기도 안산시 단원구 대부황금로 1421",
+                gu: "단원구",
+                phone: "031-491-1600",
+                seats: "150석 (대형 홀 보유)",
+                parking: "매장 전면 초대형 야외 무료 주차장",
+                holiday: "매주 수요일 정기휴무",
+                description: "대부도 칼국수 명인 골목 중에서도 으뜸가는 곳으로, 껍질을 전부 깐 바지락과 백합이 산더미같이 깔려 나오는 맑고 시원한 육수의 수제 칼국수를 웅장하게 대접합니다. 직접 마실 수 있는 동동주 무료 셀프코너가 강점입니다.",
+                lat: 37.2642,
+                lng: 126.5954
+            }
+        ];
+
+        const getCoordinatesForAddressHeuristic = (address, index) => {
+            const zones = [
+                { keyword: "고잔", lat: 37.316, lng: 126.830 },
+                { keyword: "중앙", lat: 37.318, lng: 126.837 },
+                { keyword: "초지", lat: 37.302, lng: 126.812 },
+                { keyword: "선부", lat: 37.337, lng: 126.806 },
+                { keyword: "원곡", lat: 37.324, lng: 126.791 },
+                { keyword: "성포", lat: 37.327, lng: 126.845 },
+                { keyword: "월피", lat: 37.333, lng: 126.851 },
+                { keyword: "와동", lat: 37.339, lng: 126.818 },
+                { keyword: "본오", lat: 37.298, lng: 126.864 },
+                { keyword: "사동", lat: 37.296, lng: 126.844 },
+                { keyword: "일동", lat: 37.322, lng: 126.865 },
+                { keyword: "이동", lat: 37.316, lng: 126.852 },
+                { keyword: "팔곡", lat: 37.302, lng: 126.883 },
+                { keyword: "부곡", lat: 37.338, lng: 126.861 },
+                { keyword: "신길", lat: 37.329, lng: 126.772 },
+                { keyword: "대부", lat: 37.264, lng: 126.595 },
+                { keyword: "풍도", lat: 37.098, lng: 126.384 }
+            ];
+
+            let matchedLat = 37.3218778; // Ansan City Hall (Fallback)
+            let matchedLng = 126.8308821;
+
+            for (const zone of zones) {
+                if (address.includes(zone.keyword)) {
+                    matchedLat = zone.lat;
+                    matchedLng = zone.lng;
+                    break;
+                }
+            }
+
+            // Pseudo-random jitter generator to prevent markers overlapping perfectly
+            const hash = (str) => {
+                let h = 0;
+                for (let i = 0; i < str.length; i++) {
+                    h = str.charCodeAt(i) + ((h << 5) - h);
+                }
+                return h;
+            };
+
+            const seed = hash(address + String(index));
+            const latOffset = ((seed % 100) / 100 - 0.5) * 0.016; 
+            const lngOffset = (((seed >> 8) % 100) / 100 - 0.5) * 0.019;
+
+            return {
+                lat: parseFloat((matchedLat + latOffset).toFixed(6)),
+                lng: parseFloat((matchedLng + lngOffset).toFixed(6))
+            };
+        };
+
+        function App() {
+            const [restaurants, setRestaurants] = useState(defaultRestaurants);
+            const [selectedId, setSelectedId] = useState(null);
+            const [regionFilter, setRegionFilter] = useState("전체"); // 전체, 단원구, 상록구
+            const [categoryFilter, setCategoryFilter] = useState("전체"); // 한식, 양식, 등
+            const [searchQuery, setSearchQuery] = useState("");
+            const [importedCount, setImportedCount] = useState(0);
+            const [isImporting, setIsImporting] = useState(false);
+            const [activeTab, setActiveTab] = useState("list"); // Mobile responsive: 'list' or 'map'
+
+            // Ref for Leaflet Map instance
+            const mapRef = useRef(null);
+            const markersLayerRef = useRef(null);
+            const mapContainerId = "leaflet-ansan-map";
+
+            // Categorize list of cuisines
+            const categories = ["전체", "한식", "양식", "중식", "일식/아시안", "기타"];
+
+            // Find current active restaurant details
+            const activeRestaurant = useMemo(() => {
+                return restaurants.find(r => r.id === selectedId) || null;
+            }, [restaurants, selectedId]);
+
+            const mapCSVHeaders = (headers) => {
+                const mapping = {
+                    name: -1, address: -1, category: -1, phone: -1,
+                    seats: -1, parking: -1, holiday: -1, description: -1
+                };
+                headers.forEach((header, idx) => {
+                    const clean = header.trim();
+                    if (/상호|이름|식당명|업소명|제목|글제목/i.test(clean)) mapping.name = idx;
+                    else if (/주소|소재지|도로명|지번/i.test(clean)) mapping.address = idx;
+                    else if (/분류|음식종류|업종|카테고리/i.test(clean)) mapping.category = idx;
+                    else if (/전화|연락처|전화번호/i.test(clean)) mapping.phone = idx;
+                    else if (/좌석|크기|규모|인원/i.test(clean)) mapping.seats = idx;
+                    else if (/주차|주차장|파킹/i.test(clean)) mapping.parking = idx;
+                    else if (/휴무|휴일|휴업|쉬는날/i.test(clean)) mapping.holiday = idx;
+                    else if (/설명|내용|특징|요약/i.test(clean)) mapping.description = idx;
+                });
+                return mapping;
+            };
+
+            const handleCSVUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                setIsImporting(true);
+                Papa.parse(file, {
+                    header: false,
+                    skipEmptyLines: true,
+                    complete: function (results) {
+                        const data = results.data;
+                        if (data.length < 2) {
+                            alert("업로드된 파일에 충분한 맛집 데이터가 존재하지 않습니다.");
+                            setIsImporting(false);
+                            return;
+                        }
+
+                        const headers = data[0];
+                        const colMap = mapCSVHeaders(headers);
+
+                        // If at least name and address columns are found, proceed with parsing
+                        if (colMap.name === -1 || colMap.address === -1) {
+                            alert("필수 항목(상호명/식당이름, 주소) 컬럼을 CSV에서 인식하지 못했습니다.\n적절한 헤더를 포함하고 있는지 확인해 주세요.");
+                            setIsImporting(false);
+                            return;
+                        }
+
+                        const newRestaurants = [];
+                        
+                        for (let i = 1; i < data.length; i++) {
+                            const row = data[i];
+                            if (row.length < headers.length) continue;
+
+                            const rawAddress = row[colMap.address] || "";
+                            if (!rawAddress) continue;
+
+                            const name = row[colMap.name] || `생생맛집 #${i}`;
+                            const phone = colMap.phone !== -1 ? row[colMap.phone] || "정보 없음" : "정보 없음";
+                            const rawCategory = colMap.category !== -1 ? row[colMap.category] || "기타" : "한식";
+                            
+                            // Normalizing Gu category
+                            let gu = "단원구";
+                            if (rawAddress.includes("상록구")) {
+                                gu = "상록구";
+                            }
+
+                            // Normalizing Category
+                            let normalizedCategory = "한식";
+                            if (/한식|백반|정식|탕|고기|찌개|갈비/i.test(rawCategory)) normalizedCategory = "한식";
+                            else if (/양식|파스타|스테이크|피자|바비큐/i.test(rawCategory)) normalizedCategory = "양식";
+                            else if (/중식|마라|짜장|짬뽕/i.test(rawCategory)) normalizedCategory = "중식";
+                            else if (/일식|동남아|아시안|인도|쌀국수|스시|초밥|사시미/i.test(rawCategory)) normalizedCategory = "일식/아시안";
+                            else normalizedCategory = "기타";
+
+                            const seats = colMap.seats !== -1 ? row[colMap.seats] || "정보 없음" : "정보 없음";
+                            const parking = colMap.parking !== -1 ? row[colMap.parking] || "정보 없음" : "정보 없음";
+                            const holiday = colMap.holiday !== -1 ? row[colMap.holiday] || "정보 없음" : "정보 없음";
+                            const description = colMap.description !== -1 ? row[colMap.description] || `${name}은(는) 안산시에서 공식 선정한 특색 있고 건강한 맛과 정성을 다하는 추천 맛집입니다.` : `${name}은(는) 안산시에서 공식 선정한 특색 있고 건강한 맛과 정성을 다하는 추천 맛집입니다.`;
+
+                            // Map coordinates based on address heuristics
+                            const coords = getCoordinatesForAddressHeuristic(rawAddress, i);
+
+                            newRestaurants.push({
+                                id: 1000 + i,
+                                name,
+                                category: normalizedCategory,
+                                address: rawAddress,
+                                gu,
+                                phone,
+                                seats,
+                                parking,
+                                holiday,
+                                description,
+                                lat: coords.lat,
+                                lng: coords.lng
+                            });
+                        }
+
+                        if (newRestaurants.length > 0) {
+                            setRestaurants(newRestaurants);
+                            setImportedCount(newRestaurants.length);
+                            setSelectedId(null);
+                            
+                            // Fly map to central Ansan city hall position
+                            if (mapRef.current) {
+                                mapRef.current.setView([37.3218778, 126.8308821], 12);
+                            }
+                        } else {
+                            alert("인식 가능한 형태의 맛집 레코드가 존재하지 않습니다.");
+                        }
+                        setIsImporting(false);
+                    },
+                    error: function (err) {
+                        alert("CSV 파일을 파싱하는 과정에서 에러가 발생했습니다: " + err.message);
+                        setIsImporting(false);
+                    }
+                });
+            };
+
+            const filteredRestaurants = useMemo(() => {
+                return restaurants.filter(item => {
+                    const matchRegion = regionFilter === "전체" || item.gu === regionFilter;
+                    const matchCategory = categoryFilter === "전체" || item.category === categoryFilter;
+                    const matchQuery = !searchQuery || 
+                        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        item.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        item.description.toLowerCase().includes(searchQuery.toLowerCase());
+                    return matchRegion && matchCategory && matchQuery;
+                });
+            }, [restaurants, regionFilter, categoryFilter, searchQuery]);
+
+            useEffect(() => {
+                // Initialize the map once
+                if (!mapRef.current) {
+                    const ansanCenter = [37.3218778, 126.8308821];
+                    const map = L.map(mapContainerId, {
+                        zoomControl: false // custom placement below
+                    }).setView(ansanCenter, 13);
+
+                    // High contrast stylish light tile layers
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                        subdomains: 'abcd',
+                        maxZoom: 19
+                    }).addTo(map);
+
+                    // Add Custom Zoom Control to top right
+                    L.control.zoom({ position: 'topright' }).addTo(map);
+
+                    mapRef.current = map;
+                    markersLayerRef.current = L.layerGroup().addTo(map);
+                }
+
+                // Cleanup on unmount
+                return () => {
+                    if (mapRef.current) {
+                        mapRef.current.remove();
+                        mapRef.current = null;
+                    }
+                };
+            }, []);
+
+            useEffect(() => {
+                if (!mapRef.current || !markersLayerRef.current) return;
+
+                // Clear previous markers
+                markersLayerRef.current.clearLayers();
+
+                // Style logic based on category
+                const getMarkerColor = (category) => {
+                    switch(category) {
+                        case "한식": return "bg-amber-500";
+                        case "중식": return "bg-rose-500";
+                        case "양식": return "bg-sky-500";
+                        case "일식/아시안": return "bg-emerald-500";
+                        default: return "bg-purple-500";
+                    }
+                };
+
+                // Plot filtered restaurants
+                filteredRestaurants.forEach(item => {
+                    const isActive = item.id === selectedId;
+                    const colorClass = getMarkerColor(item.category);
+                    const sizeClass = isActive ? "w-10 h-10 ring-4 ring-offset-2 ring-orange-500 scale-125 z-[1000]" : "w-8 h-8 hover:scale-115";
+
+                    const customHtml = `
+                        <div class="flex items-center justify-center rounded-full ${colorClass} text-white ${sizeClass} transition-all duration-300 transform shadow-md border-2 border-white cursor-pointer">
+                            <i class="fa-solid fa-utensils text-[11px]"></i>
+                        </div>
+                    `;
+
+                    const customIcon = L.divIcon({
+                        html: customHtml,
+                        className: 'custom-leaflet-marker',
+                        iconSize: isActive ? [40, 40] : [32, 32],
+                        iconAnchor: isActive ? [20, 20] : [16, 16]
+                    });
+
+                    const marker = L.marker([item.lat, item.lng], { icon: customIcon });
+                    
+                    // Click handler
+                    marker.on('click', () => {
+                        setSelectedId(item.id);
+                        // On smaller screen, when tapping marker, center on it but allow detail view
+                        mapRef.current.setView([item.lat - 0.002, item.lng], 14, { animate: true });
+                    });
+
+                    // Simple tooltip hover
+                    marker.bindTooltip(`
+                        <div class="font-sans px-2 py-1 text-xs">
+                            <p class="font-bold text-slate-800">${item.name}</p>
+                            <p class="text-orange-500 font-semibold">${item.category} • ${item.gu}</p>
+                        </div>
+                    `, { direction: 'top', offset: [0, -10] });
+
+                    markersLayerRef.current.addLayer(marker);
+                });
+
+                // Auto pan to encompass markers if they are set and valid
+                if (filteredRestaurants.length > 0 && searchQuery) {
+                    const bounds = L.latLngBounds(filteredRestaurants.map(r => [r.lat, r.lng]));
+                    mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+                }
+
+            }, [filteredRestaurants, selectedId, searchQuery]);
+
+            const handleSelectRestaurant = (item) => {
+                setSelectedId(item.id);
+                if (mapRef.current) {
+                    mapRef.current.setView([item.lat - 0.002, item.lng], 15, { animate: true });
+                }
+                // Switch to map view on mobile if needed
+                setActiveTab("map");
+            };
+
+            // Copy Address helper
+            const handleCopyAddress = (text) => {
+                const dummy = document.createElement("textarea");
+                document.body.appendChild(dummy);
+                dummy.value = text;
+                dummy.select();
+                document.execCommand("copy");
+                document.body.removeChild(dummy);
+                alert("📍 주소가 클립보드에 복사되었습니다!");
+            };
+
+            return (
+                <div class="flex-1 flex flex-col h-full bg-slate-50">
+                    
+                    {/* TOP HEADER */}
+                    <header class="bg-gradient-to-r from-orange-600 via-amber-500 to-amber-600 text-white shadow-md z-[2000] px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="bg-white p-2 rounded-xl text-orange-600 shadow-md">
+                                <i class="fa-solid fa-map-location-dot text-2xl"></i>
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-extrabold tracking-tight flex items-center gap-2">
+                                    안산시 생생 맛집 지도
+                                    <span class="bg-white/20 text-xs px-2 py-0.5 rounded-full backdrop-blur-sm font-medium border border-white/20">
+                                        Web App
+                                    </span>
+                                </h1>
+                                <p class="text-[11px] text-orange-50/80 font-light">Ansan Saengsaeng Gourmet Smart Map Dashboard</p>
+                            </div>
+                        </div>
+
+                        {/* File Upload Zone */}
+                        <div class="flex items-center space-x-2">
+                            <label class="relative flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/30 hover:border-white/50 text-white px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200">
+                                <i class="fa-solid fa-file-import"></i>
+                                <span>CSV 데이터 연동</span>
+                                <input 
+                                    type="file" 
+                                    accept=".csv" 
+                                    onChange={handleCSVUpload} 
+                                    class="hidden" 
+                                />
+                            </label>
+                            {importedCount > 0 && (
+                                <span class="bg-teal-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-inner animate-pulse">
+                                    {importedCount}개 연동 완료
+                                </span>
+                            )}
+                        </div>
+                    </header>
+
+                    {/* MOBILE TAB SWITCHER */}
+                    <div class="md:hidden flex bg-white border-b border-slate-200 text-sm font-medium z-[1000] sticky top-0">
+                        <button 
+                            onClick={() => setActiveTab("list")}
+                            class={`flex-1 py-3 text-center transition-all ${activeTab === 'list' ? 'text-orange-500 border-b-2 border-orange-500 font-bold bg-orange-50/20' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <i class="fa-solid fa-list-ul mr-1.5"></i> 리스트 목록 ({filteredRestaurants.length})
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab("map")}
+                            class={`flex-1 py-3 text-center transition-all ${activeTab === 'map' ? 'text-orange-500 border-b-2 border-orange-500 font-bold bg-orange-50/20' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <i class="fa-solid fa-map mr-1.5"></i> 맛집 지도
+                        </button>
+                    </div>
+
+                    {/* MAIN LAYOUT */}
+                    <main class="flex-1 flex overflow-hidden relative">
+
+                        {/* LEFT SIDEBAR (Filters, CSV Tracker, and Restaurant Scroll List) */}
+                        <aside class={`w-full md:w-[380px] lg:w-[420px] bg-white border-r border-slate-200 flex flex-col h-full z-[1500] ${activeTab === 'list' ? 'block' : 'hidden md:flex'}`}>
+                            
+                            {/* SEARCH AND REGION FILTERS */}
+                            <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3.5">
+                                
+                                {/* Region Selector */}
+                                <div>
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">1. 지역구 선택</span>
+                                    <div class="grid grid-cols-3 gap-1.5">
+                                        {["전체", "단원구", "상록구"].map(region => (
+                                            <button
+                                                key={region}
+                                                onClick={() => setRegionFilter(region)}
+                                                class={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                                                    regionFilter === region 
+                                                    ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/20' 
+                                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-800'
+                                                }`}
+                                            >
+                                                {region}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Category Selector */}
+                                <div>
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">2. 음식 대분류</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        {categories.map(cat => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => setCategoryFilter(cat)}
+                                                class={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                                                    categoryFilter === cat
+                                                    ? 'bg-slate-800 text-white border-slate-800'
+                                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                {cat === "전체" ? "전체" : cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Text Search Bar */}
+                                <div class="relative">
+                                    <input 
+                                        type="text"
+                                        placeholder="상호명, 주소, 설명 검색..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        class="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm transition-all text-slate-700 placeholder-slate-400"
+                                    />
+                                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                    {searchQuery && (
+                                        <button 
+                                            onClick={() => setSearchQuery("")}
+                                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            <i class="fa-solid fa-circle-xmark text-xs"></i>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* CSV INFOBAR / LOADING STATUS */}
+                            {isImporting && (
+                                <div class="bg-amber-50 border-b border-amber-100 px-4 py-2.5 flex items-center space-x-2 text-amber-700 animate-pulse text-xs">
+                                    <i class="fa-solid fa-spinner animate-spin"></i>
+                                    <span>경기도 안산시_생생맛집_20240903.csv 파일 연동 및 변환 중...</span>
+                                </div>
+                            )}
+
+                            {/* RESTAURANT LIST SCROLL */}
+                            <div class="flex-1 overflow-y-auto divide-y divide-slate-100">
+                                <div class="bg-slate-100/40 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-semibold sticky top-0 backdrop-blur-sm z-10 border-b border-slate-100">
+                                    <span>검색 결과: <strong class="text-orange-500 font-bold">{filteredRestaurants.length}</strong>곳</span>
+                                    <span>안산시 생생맛집 리스트</span>
+                                </div>
+
+                                {filteredRestaurants.length === 0 ? (
+                                    <div class="p-8 text-center space-y-3">
+                                        <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+                                            <i class="fa-solid fa-utensils text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs font-semibold text-slate-600">조건에 부합하는 맛집이 없습니다.</p>
+                                            <p class="text-[10px] text-slate-400 mt-1">지역, 음식 분류 또는 키워드를 변경해 보세요.</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    filteredRestaurants.map(item => {
+                                        const isSelected = item.id === selectedId;
+                                        return (
+                                            <div 
+                                                key={item.id}
+                                                onClick={() => handleSelectRestaurant(item)}
+                                                class={`p-4 transition-all duration-150 cursor-pointer border-l-4 ${
+                                                    isSelected 
+                                                    ? 'bg-orange-50/75 border-orange-500 shadow-inner' 
+                                                    : 'border-transparent hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div class="flex items-start justify-between gap-2">
+                                                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                                        {item.name}
+                                                    </h3>
+                                                    <span class={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                                        item.category === "한식" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                                        item.category === "양식" ? "bg-sky-50 text-sky-700 border-sky-200" :
+                                                        item.category === "중식" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                                        item.category === "일식/아시안" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                                        "bg-purple-50 text-purple-700 border-purple-200"
+                                                    }`}>
+                                                        {item.category}
+                                                    </span>
+                                                </div>
+
+                                                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                                                    <span class="font-medium text-slate-700"><i class="fa-solid fa-map-pin mr-1 text-slate-400"></i>{item.gu}</span>
+                                                    <span>|</span>
+                                                    <span><i class="fa-solid fa-phone mr-1 text-slate-400"></i>{item.phone}</span>
+                                                </div>
+
+                                                <p class="mt-2 text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                                                    {item.description}
+                                                </p>
+
+                                                {/* Card Quick badges */}
+                                                <div class="mt-2.5 flex items-center gap-1.5 text-[9px] text-slate-400">
+                                                    {item.seats !== "정보 없음" && (
+                                                        <span class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
+                                                            <i class="fa-solid fa-chair mr-1 text-slate-400"></i>{item.seats}
+                                                        </span>
+                                                    )}
+                                                    {item.parking && item.parking !== "정보 없음" && (
+                                                        <span class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 max-w-[140px] truncate">
+                                                            <i class="fa-solid fa-car mr-1 text-slate-400"></i>주차 가능
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </aside>
+
+                        {/* RIGHT AREA (Leaflet Map with floating slide over detail panel) */}
+                        <section class={`flex-1 relative h-full flex flex-col ${activeTab === 'map' ? 'block' : 'hidden md:block'}`}>
+                            
+                            {/* Leaflet target container */}
+                            <div id={mapContainerId} class="w-full h-full z-10"></div>
+
+                            {/* FLOAT RESTAURANT DETAILED INFO BOX */}
+                            {activeRestaurant && (
+                                <div class="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:bottom-auto md:top-4 z-[1100] bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 md:w-[380px] max-h-[85vh] overflow-y-auto transform transition-all duration-300 animate-[slideUp_0.3s_ease]">
+                                    
+                                    {/* Detail Card Header */}
+                                    <div class="flex items-start justify-between mb-3.5 pb-3 border-b border-slate-100">
+                                        <div>
+                                            <div class="flex items-center gap-1.5 mb-1">
+                                                <span class="bg-orange-100 text-orange-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                                    생생맛집
+                                                </span>
+                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                    {activeRestaurant.gu}
+                                                </span>
+                                            </div>
+                                            <h2 class="text-lg font-black text-slate-800 tracking-tight leading-tight">
+                                                {activeRestaurant.name}
+                                            </h2>
+                                        </div>
+                                        <button 
+                                            onClick={() => setSelectedId(null)}
+                                            class="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-full transition-colors"
+                                        >
+                                            <i class="fa-solid fa-xmark text-sm"></i>
+                                        </button>
+                                    </div>
+
+                                    {/* Description block */}
+                                    <div class="mb-4 bg-orange-50/50 rounded-xl p-3 border-l-4 border-orange-500">
+                                        <p class="text-xs text-slate-700 leading-relaxed font-medium">
+                                            "{activeRestaurant.description}"
+                                        </p>
+                                    </div>
+
+                                    {/* Grid of details */}
+                                    <div class="space-y-3 text-xs text-slate-700">
+                                        
+                                        {/* Address Row */}
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-5 text-center text-slate-400 mt-0.5">
+                                                <i class="fa-solid fa-location-dot"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-slate-500 text-[10px] uppercase">소재지 주소</p>
+                                                <div class="flex items-center gap-2 mt-0.5">
+                                                    <p class="text-slate-800 font-medium leading-relaxed">{activeRestaurant.address}</p>
+                                                    <button 
+                                                        onClick={() => handleCopyAddress(activeRestaurant.address)}
+                                                        class="shrink-0 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-1 rounded border border-slate-200 active:scale-95 transition-all"
+                                                        title="주소 복사"
+                                                    >
+                                                        복사
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Phone Row */}
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-5 text-center text-slate-400 mt-0.5">
+                                                <i class="fa-solid fa-phone"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-slate-500 text-[10px] uppercase">전화번호</p>
+                                                <a 
+                                                    href={`tel:${activeRestaurant.phone}`} 
+                                                    class="text-orange-600 hover:underline font-bold block mt-0.5"
+                                                >
+                                                    {activeRestaurant.phone}
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        {/* Seats Row */}
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-5 text-center text-slate-400 mt-0.5">
+                                                <i class="fa-solid fa-chair"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-slate-500 text-[10px] uppercase">좌석 규모</p>
+                                                <p class="text-slate-800 font-medium mt-0.5">{activeRestaurant.seats}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Parking Row */}
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-5 text-center text-slate-400 mt-0.5">
+                                                <i class="fa-solid fa-square-parking"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-slate-500 text-[10px] uppercase">주차 여부</p>
+                                                <p class="text-slate-800 font-medium mt-0.5 leading-relaxed">{activeRestaurant.parking}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Holiday Row */}
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-5 text-center text-slate-400 mt-0.5">
+                                                <i class="fa-solid fa-calendar-xmark"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-slate-500 text-[10px] uppercase">정기 휴무일</p>
+                                                <p class="text-red-600 font-bold mt-0.5">{activeRestaurant.holiday}</p>
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div class="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
+                                        <a 
+                                            href={`https://map.kakao.com/?q=${encodeURIComponent(activeRestaurant.name)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="bg-yellow-400 hover:bg-yellow-500 active:scale-95 text-slate-900 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all text-center"
+                                        >
+                                            <i class="fa-solid fa-comment text-[13px]"></i>
+                                            카카오맵 찾기
+                                        </a>
+                                        <a 
+                                            href={`https://search.naver.com/search.naver?query=${encodeURIComponent("안산 " + activeRestaurant.name)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all text-center"
+                                        >
+                                            <i class="fa-solid fa-square-n text-[13px]"></i>
+                                            네이버 리뷰
+                                        </a>
+                                    </div>
+                                    
+                                </div>
+                            )}
+
+                        </section>
+
+                    </main>
+
+                    {/* FOOTER BAR */}
+                    <footer class="bg-slate-800 text-slate-400 text-[11px] px-4 py-2 border-t border-slate-700 flex flex-col md:flex-row items-center justify-between gap-1 z-[2000]">
+                        <p>© 2026 안산시 생생 맛집 정보 센터. All Rights Reserved.</p>
+                        <p class="flex items-center gap-2">
+                            <span>데이터 소스: 경기도 안산시_생생맛집_20240903.csv</span>
+                            <span class="text-slate-600">|</span>
+                            <span class="text-orange-400 font-medium">안산 문화관광 먹거리 기반 시각화</span>
+                        </p>
+                    </footer>
+
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
+</body>
+</html>
